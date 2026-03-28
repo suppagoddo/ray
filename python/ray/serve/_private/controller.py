@@ -242,6 +242,7 @@ class ServeController:
             get_all_live_placement_group_names(),
             self.cluster_node_info_cache,
             self.autoscaling_state_manager,
+            tracing_config=self.global_tracing_config,
         )
 
         # Manage all applications' state
@@ -251,6 +252,7 @@ class ServeController:
             self.endpoint_state,
             self.kv_store,
             self.global_logging_config,
+            self.global_tracing_config,
         )
 
         # Controller actor details
