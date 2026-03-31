@@ -1132,6 +1132,108 @@ def test_grpc_streaming_tracing_attributes(serve_and_ray_shutdown, method_name):
     shutil.rmtree(spans_dir)
 
 
+@pytest.mark.parametrize("use_dict", [False, True])
+def test_tracing_config_enabled(serve_start_shutdown, use_dict):
+    """Test that TracingConfig enables tracing and produces span files."""
+    from ray.serve.schema import TracingConfig
+
+    if use_dict:
+        tracing_config = {"enabled": True, "sampling_ratio": 1.0}
+    else:
+        tracing_config = TracingConfig(enabled=True, sampling_ratio=1.0)
+
+    @serve.deployment
+    class Model:
+        def __call__(self, request: Request):
+            return "ok"
+
+    serve.run(Model.bind())
+    serve.start(tracing_config=tracing_config)
+
+    resp = httpx.get(get_application_url({"proxy_url": "http://localhost:8000"}))
+    assert resp.status_code == 200
+
+    serve.shutdown()
+
+    serve_logs_dir = get_serve_logs_dir()
+    spans_dir = os.path.join(serve_logs_dir, "spans")
+    assert os.path.exists(spans_dir)
+    files = os.listdir(spans_dir)
+    assert len(files) > 0
+
+    # Verify span files have content
+    has_spans = False
+    for f in files:
+        fpath = os.path.join(spans_dir, f)
+        if os.path.getsize(fpath) > 0:
+            has_spans = True
+            break
+    assert has_spans
+
+    shutil.rmtree(spans_dir)
+
+
+def test_tracing_config_disabled(serve_start_shutdown):
+    """Test that TracingConfig(enabled=False) disables tracing."""
+    from ray.serve.schema import TracingConfig
+
+    tracing_config = TracingConfig(enabled=False)
+
+    @serve.deployment
+    class Model:
+        def __call__(self, request: Request):
+            return "ok"
+
+    serve.run(Model.bind())
+    serve.start(tracing_config=tracing_config)
+
+    resp = httpx.get(get_application_url({"proxy_url": "http://localhost:8000"}))
+    assert resp.status_code == 200
+
+    serve.shutdown()
+
+    serve_logs_dir = get_serve_logs_dir()
+    spans_dir = os.path.join(serve_logs_dir, "spans")
+    # When tracing is disabled, spans dir should not exist or be empty
+    if os.path.exists(spans_dir):
+        files = os.listdir(spans_dir)
+        for f in files:
+            fpath = os.path.join(spans_dir, f)
+            assert os.path.getsize(fpath) == 0
+        shutil.rmtree(spans_dir)
+
+
+def test_tracing_config_custom_sampling_ratio(serve_start_shutdown):
+    """Test that TracingConfig with sampling_ratio=0.0 produces no spans."""
+    from ray.serve.schema import TracingConfig
+
+    tracing_config = TracingConfig(enabled=True, sampling_ratio=0.0)
+
+    @serve.deployment
+    class Model:
+        def __call__(self, request: Request):
+            return "ok"
+
+    serve.run(Model.bind())
+    serve.start(tracing_config=tracing_config)
+
+    resp = httpx.get(get_application_url({"proxy_url": "http://localhost:8000"}))
+    assert resp.status_code == 200
+
+    serve.shutdown()
+
+    serve_logs_dir = get_serve_logs_dir()
+    spans_dir = os.path.join(serve_logs_dir, "spans")
+    if os.path.exists(spans_dir):
+        # With 0% sampling, span files may exist but should be empty
+        for f in os.listdir(spans_dir):
+            fpath = os.path.join(spans_dir, f)
+            if os.path.getsize(fpath) > 0:
+                spans = load_spans(fpath)
+                assert len(spans) == 0
+        shutil.rmtree(spans_dir)
+
+
 if __name__ == "__main__":
     import sys
 

@@ -1131,6 +1131,14 @@ class ServeController:
             app_config_dict = app_config.model_dump(exclude_unset=True)
             new_config_checkpoint[app_config.name] = app_config_dict
 
+        # If a tracing_config is present in the new config, propagate it to
+        # the deployment and application state managers so that newly created
+        # replicas and proxies pick it up.
+        if config.tracing_config is not None:
+            self.global_tracing_config = config.tracing_config
+            self.deployment_state_manager.update_tracing_config(config.tracing_config)
+            self.application_state_manager.update_tracing_config(config.tracing_config)
+
         self.kv_store.put(
             CONFIG_CHECKPOINT_KEY,
             pickle.dumps(

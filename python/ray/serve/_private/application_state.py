@@ -1351,6 +1351,12 @@ class ApplicationStateManager:
 
         ServeUsageTag.NUM_APPS.record(str(len(self._application_states)))
 
+    def update_tracing_config(self, tracing_config):
+        """Update the tracing config for new and existing application states."""
+        self._tracing_config = tracing_config
+        for app_state in self._application_states.values():
+            app_state._tracing_config = tracing_config
+
     def get_deployments(self, app_name: str) -> List[str]:
         """Return all deployment names by app name"""
         if app_name not in self._application_states:

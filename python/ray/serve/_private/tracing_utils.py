@@ -51,6 +51,7 @@ TRACE_STACK: ContextVar[List[Any]] = ContextVar(
 
 _tracer = None
 _tracer_lock = threading.Lock()
+_tracing_enabled = False
 
 
 def get_tracer():
@@ -168,13 +169,10 @@ def tracing_decorator_factory(
     """
 
     def tracing_decorator(func):
-        if not is_tracing_enabled():
-            # if tracing is not enabled, we don't want to wrap the function
-            # with the tracing decorator.
-            return func
-
         @wraps(func)
         def synchronous_wrapper(*args, **kwargs):
+            if not is_tracing_enabled():
+                return func(*args, **kwargs)
             with TraceContextManager(trace_name, span_kind):
                 result = func(*args, **kwargs)
 
@@ -182,18 +180,27 @@ def tracing_decorator_factory(
 
         @wraps(func)
         def generator_wrapper(*args, **kwargs):
+            if not is_tracing_enabled():
+                yield from func(*args, **kwargs)
+                return
             with TraceContextManager(trace_name, span_kind):
                 for item in func(*args, **kwargs):
                     yield item
 
         @wraps(func)
         async def asynchronous_wrapper(*args, **kwargs):
+            if not is_tracing_enabled():
+                return await func(*args, **kwargs)
             with TraceContextManager(trace_name, span_kind):
                 result = await func(*args, **kwargs)
             return result
 
         @wraps(func)
         async def asyc_generator_wrapper(*args, **kwargs):
+            if not is_tracing_enabled():
+                async for item in func(*args, **kwargs):
+                    yield item
+                return
             with TraceContextManager(trace_name, span_kind):
                 async for item in func(*args, **kwargs):
                     yield item
@@ -234,6 +241,8 @@ def setup_tracing(
     Returns:
         bool: True if tracing setup is successful, False otherwise.
     """
+    global _tracing_enabled
+
     if tracing_exporter_import_path == "":
         return False
 
@@ -270,6 +279,7 @@ def setup_tracing(
     for span_processor in span_processors:
         trace.get_tracer_provider().add_span_processor(span_processor)
 
+    _tracing_enabled = True
     return True
 
 
@@ -414,7 +424,7 @@ def set_span_exception(exc: Exception, escaped: bool = False):
 
 
 def is_tracing_enabled() -> bool:
-    return RAY_SERVE_TRACING_EXPORTER_IMPORT_PATH != "" and trace is not None
+    return _tracing_enabled and trace is not None
 
 
 def is_span_recording() -> bool:

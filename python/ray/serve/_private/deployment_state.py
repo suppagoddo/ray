@@ -4965,6 +4965,12 @@ class DeploymentStateManager:
             tracing_config=self._tracing_config,
         )
 
+    def update_tracing_config(self, tracing_config):
+        """Update the tracing config for new and existing deployment states."""
+        self._tracing_config = tracing_config
+        for deployment_state in self._deployment_states.values():
+            deployment_state._tracing_config = tracing_config
+
     def _map_actor_names_to_deployment(
         self, all_current_actor_names: List[str]
     ) -> Dict[str, List[str]]:
